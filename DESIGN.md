@@ -42,11 +42,11 @@ SETU is a practical tool for planners and supervisors who coordinate work betwee
 
 ## Layout and routes
 
-- `/` is an editorial landing page with a direct path into the application.
+- `/` is an editorial landing page with one prominent workspace link under the headline, a construction illustration, feature rows, a three-step guide, and native FAQ disclosures.
 - `/workspace` is the execution desk. It has a persistent project sidebar at desktop sizes and a horizontally scrollable navigation strip on narrow screens.
 - Sidebar views: Planned schedule, Actual work, Progress, Punch list, Institutional memory, Settings. Keep selection in the `view` query parameter.
 - The workspace uses comfortable body sizes (12–15px for supporting text, 14–18px for card content) and stronger section headings. Preserve dense schedules with table overflow rather than shrinking their type.
-- At widths below 940px, work panels stack. Below 640px, cards and landing-page lanes stack.
+- At widths below 940px, work panels and landing sections stack. Below 640px, keep the landing navigation, numbered steps, and FAQs readable without horizontal scrolling.
 
 ## Interaction
 
