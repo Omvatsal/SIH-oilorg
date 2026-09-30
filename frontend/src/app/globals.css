@@ -1,0 +1,33 @@
+@import "../styles/palette.css";
+@import "../styles/tokens.css";
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); }
+main { max-width: 1240px; margin: auto; padding: 24px; }
+h1 { margin: 0; font-size: 2.2rem; }
+h2 { margin-top: 0; font-size: 1.2rem; }
+h3 { font-size: 1rem; margin-bottom: 8px; }
+p { line-height: 1.45; }
+.subtitle, .muted { color: var(--color-muted); }
+.subtitle { margin-top: 4px; }
+.grid { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 16px; margin-top: 24px; }
+.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 16px; min-width: 0; }
+.button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+button { background: var(--color-primary); color: var(--color-on-primary); border: 0; border-radius: var(--radius-control); padding: 10px 14px; font: inherit; font-weight: bold; cursor: pointer; min-height: 44px; }
+button.secondary { background: var(--color-muted); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid var(--color-ask); outline-offset: 2px; }
+textarea, input[type="file"], input[type="date"], input[type="text"] { width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-control); padding: 10px; font: inherit; }
+input[type="date"], input[type="text"] { display: block; margin: 4px 0 10px; }
+textarea { min-height: 140px; resize: vertical; }
+input[type="file"] { margin: 8px 0; }
+.row { padding: 10px 0; border-bottom: 1px solid var(--color-border); line-height: 1.45; }
+.row:last-child { border-bottom: 0; }
+.mono { font-family: var(--font-mono); }
+.safe { color: var(--color-safe); } .review { color: var(--color-review); } .block { color: var(--color-block); } .ask { color: var(--color-ask); }
+.metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.metric { padding: 10px; background: var(--color-bg); border-radius: var(--radius-control); text-align: center; }
+.metric strong { display: block; font-size: 1.3rem; font-family: var(--font-mono); }
+.source-text { white-space: pre-wrap; line-height: 1.6; border-left: 3px solid var(--color-border); padding-left: 10px; }
+.source-text mark { background: var(--color-bg); color: var(--color-primary); border-bottom: 2px solid var(--color-primary); }
+.notice { border-left: 3px solid var(--color-review); padding-left: 10px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }

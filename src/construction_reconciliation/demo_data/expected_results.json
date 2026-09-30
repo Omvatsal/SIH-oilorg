@@ -1,0 +1,8 @@
+{
+  "p201_chat.txt": {
+    "updates": {"L6-421": "COMPLETE", "L6-422": "COMPLETE", "L6-424": "BLOCKED"},
+    "approval_tier": "PLANNER"
+  },
+  "grouting_chat.txt": {"updates": {}, "unmatched_action": "GROUT"},
+  "hydrotest_chat.txt": {"suspicious_rule": "Predecessor evidence", "approval_tier": "PLANNER"}
+}

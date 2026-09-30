@@ -1,0 +1,10 @@
+:root {
+  --color-bg: var(--sand-50); --color-surface: var(--sand-25);
+  --color-text: var(--sand-900); --color-muted: var(--sand-600);
+  --color-border: var(--sand-200); --color-primary: var(--terracotta-600);
+  --color-safe: var(--olive-600); --color-review: var(--amber-600);
+  --color-block: var(--brick-600); --color-ask: var(--plum-600);
+  --color-on-primary: var(--sand-25);
+  --radius-card: 12px; --radius-control: 8px;
+  --font-sans: Arial, sans-serif; --font-mono: Consolas, monospace;
+}
