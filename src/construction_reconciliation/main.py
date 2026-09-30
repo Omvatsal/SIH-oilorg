@@ -1,4 +1,4 @@
-"""FastAPI entry point for the offline Phase 1 demonstration."""
+"""FastAPI entry point for the offline SETU demonstration."""
 
 import argparse
 import os
@@ -13,7 +13,7 @@ from construction_reconciliation.demo.importer import import_csv, import_xer, sc
 from construction_reconciliation.demo.pipeline import DemoStore
 
 PRODUCT_NAME = os.getenv("PRODUCT_NAME", "SETU")
-app = FastAPI(title=f"{PRODUCT_NAME} Phase 1 API")
+app = FastAPI(title=f"{PRODUCT_NAME} Phase 2 API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -28,6 +28,7 @@ class MessageRequest(BaseModel):
     text: str
     area: str | None = None
     received_at: date | None = None
+    report_id: str | None = None
 
 
 @app.get("/api/config")
@@ -59,11 +60,20 @@ async def import_schedule(file: UploadFile):
 def ingest_message(payload: MessageRequest):
     if payload.schedule_id not in store.schedules:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    return store.process(payload.schedule_id, payload.text, area=payload.area, received_at=payload.received_at)
+    if payload.report_id:
+        workspace = store.workspaces.get(payload.report_id)
+        if workspace is None:
+            raise HTTPException(status_code=404, detail="Report not found")
+        if not workspace.patches or workspace.patches[0].schedule_id != payload.schedule_id:
+            raise HTTPException(status_code=409, detail="Report belongs to a different schedule")
+    try:
+        return store.process(payload.schedule_id, payload.text, area=payload.area, received_at=payload.received_at, report_id=payload.report_id, source_kind="MESSAGE")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/ingest/file")
-async def ingest_file(schedule_id: str, file: UploadFile, area: str | None = None, received_at: date | None = None):
+async def ingest_file(schedule_id: str, file: UploadFile, area: str | None = None, received_at: date | None = None, report_id: str | None = None):
     if schedule_id not in store.schedules:
         raise HTTPException(status_code=404, detail="Schedule not found")
     suffix = (file.filename or "").lower().rsplit(".", 1)[-1]
@@ -84,7 +94,17 @@ async def ingest_file(schedule_id: str, file: UploadFile, area: str | None = Non
             raise HTTPException(status_code=422, detail="Could not read Excel report") from exc
     else:
         raise HTTPException(status_code=422, detail="Only txt, csv, and xlsx reports are supported")
-    return store.process(schedule_id, text, area=area, received_at=received_at)
+    if report_id:
+        workspace = store.workspaces.get(report_id)
+        if workspace is None:
+            raise HTTPException(status_code=404, detail="Report not found")
+        if not workspace.patches or workspace.patches[0].schedule_id != schedule_id:
+            raise HTTPException(status_code=409, detail="Report belongs to a different schedule")
+    source_kind = "XLSX" if suffix == "xlsx" else "CSV" if suffix == "csv" else "TEXT"
+    try:
+        return store.process(schedule_id, text, area=area, received_at=received_at, source_kind=source_kind, filename=file.filename, report_id=report_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get("/workspace/{report_id}")

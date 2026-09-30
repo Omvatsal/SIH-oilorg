@@ -2,7 +2,7 @@
 
 This repository contains the Python backend foundation for reconciling construction schedule activities with reported site execution. The package separates database access, extraction, embeddings, matching, and authentication so each area can grow independently.
 
-## Offline Phase 1 demo
+## Offline Phase 1 and Phase 2 demo
 
 The repository also contains an offline SETU demonstration. It does not require Supabase or an LLM at runtime: it imports a synthetic CSV/XER schedule, extracts events from chat/text/Excel input, compiles tag-anchored activity updates, runs safety checks, and exposes reviewable patches with undo. The sample CSV contains 40 industrial activities; the XER sample is a smaller supported subset.
 
@@ -19,6 +19,8 @@ Open `http://localhost:3000`, import the demo schedule, then compile the prefill
 Demo route (about two minutes): import the 40-activity schedule, compile the prefilled P-201 chat, inspect the three proposed activity updates and four checks per update, apply the patch, then undo it. Replace the message with `Grouting completed for P-201.` to see unmatched work retained for review. Upload `src/construction_reconciliation/demo_data/contractor_dpr.xlsx` to exercise Excel ingestion; use `hydrotest_chat.txt` to see a missing NDT predecessor flagged.
 
 Run the focused tests with `pytest tests/demo -q`. The frontend production check is `cd frontend && npm run build`. Phase 1 data and patch state are held in the API process memory and reset on restart; the Supabase schema remains available for later integration.
+
+Phase 2 adds timezone-aware evidence intervals and multi-source workspaces. Time phrases use `Asia/Kolkata`; overlapping evidence narrows to an intersection, while disjoint ranges remain visible for planner review. To exercise the conflict route, upload `src/construction_reconciliation/demo_data/conflict_dpr.xlsx`, then append the text from `p201_discharge_blocked_chat.txt` in the same workspace. The revised patch retains both sources, supersedes revision 1, proposes `PARTIAL` for L6-424, and requires planner review.
 
 ## Folder organization
 

@@ -4,5 +4,11 @@
     "approval_tier": "PLANNER"
   },
   "grouting_chat.txt": {"updates": {}, "unmatched_action": "GROUT"},
-  "hydrotest_chat.txt": {"suspicious_rule": "Predecessor evidence", "approval_tier": "PLANNER"}
+  "hydrotest_chat.txt": {"suspicious_rule": "Predecessor evidence", "approval_tier": "PLANNER"},
+  "conflict_dpr.xlsx + p201_discharge_blocked_chat.txt": {
+    "activity_id": "L6-424",
+    "proposed_state": "PARTIAL",
+    "approval_tier": "PLANNER",
+    "patch_revision": 2
+  }
 }

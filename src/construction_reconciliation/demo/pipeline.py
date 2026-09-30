@@ -8,7 +8,23 @@ from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 from construction_reconciliation.demo.importer import TAG_RE
-from construction_reconciliation.demo.models import CandidateLink, Event, Patch, ProposedUpdate, RuleResult, Schedule, SourceSpan, Workspace
+from construction_reconciliation.demo.models import (
+    CandidateLink,
+    Event,
+    Patch,
+    ProposedUpdate,
+    RuleResult,
+    Schedule,
+    Source,
+    SourceClaim,
+    SourceConflict,
+    SourceKind,
+    SourceSpan,
+    TimeConflict,
+    TimeInterval,
+    Workspace,
+)
+from construction_reconciliation.demo.time_intervals import intersect_intervals, intervals_from_text
 
 ACTION_PATTERNS = (
     (r"\b(?:fitted|positioned|pump installed)\b", "POSITION", "COMPLETE"),
@@ -26,7 +42,13 @@ ACTION_PATTERNS = (
 )
 
 
-def extract_events(text: str, *, area: str | None = None, received_at: date | None = None) -> list[Event]:
+def extract_events(
+    text: str,
+    *,
+    area: str | None = None,
+    received_at: date | None = None,
+    source_id: str = "",
+) -> list[Event]:
     report_date = received_at or date.today()
     if not area:
         area_match = re.search(r"\bUnit[- ]?\d+\b", text, re.I)
@@ -42,6 +64,16 @@ def extract_events(text: str, *, area: str | None = None, received_at: date | No
             clause_start = max(text.rfind(".", 0, match.start()) + 1, text.rfind("\n", 0, match.start()) + 1)
             clause_end = text.find(".", match.end())
             clause = text[clause_start:clause_end if clause_end >= 0 else len(text)]
+            time_intervals, time_spans = intervals_from_text(clause, report_date)
+            merged_time = intersect_intervals(time_intervals)
+            event_time_spans = [
+                SourceSpan(
+                    start=clause_start + start,
+                    end=clause_start + end,
+                    kind="time",
+                )
+                for start, end in time_spans
+            ]
             quantity_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(spools?|joints?|m3|m|%)\b", clause, re.I)
             if quantity_match:
                 spans.append(SourceSpan(start=clause_start + quantity_match.start(), end=clause_start + quantity_match.end(), kind="qty"))
@@ -50,7 +82,22 @@ def extract_events(text: str, *, area: str | None = None, received_at: date | No
             if explicit:
                 event_date = explicit.group(0)
             cause = "valve unavailable" if action == "CONNECT_DISCHARGE" and "valve" in clause.lower() else None
-            events.append(Event(raw_text=text, object_tag=nearest.group(0).upper() if nearest else None, action=action, state=state, area=area, cause=cause, quantity=float(quantity_match.group(1)) if quantity_match else None, quantity_unit=quantity_match.group(2) if quantity_match else None, event_date=event_date, spans=spans))
+            spans.extend(event_time_spans)
+            events.append(Event(
+                raw_text=text,
+                object_tag=nearest.group(0).upper() if nearest else None,
+                action=action,
+                state=state,
+                area=area,
+                cause=cause,
+                quantity=float(quantity_match.group(1)) if quantity_match else None,
+                quantity_unit=quantity_match.group(2) if quantity_match else None,
+                event_date=event_date,
+                source_id=source_id,
+                time_interval=merged_time,
+                time_conflicts=time_intervals if merged_time is None else [],
+                spans=spans,
+            ))
     return sorted(events, key=lambda event: event.spans[0].start)
 
 
@@ -74,6 +121,64 @@ def link_and_compile(events: list[Event], schedule: Schedule) -> tuple[dict[str,
                     links[event.id].append(CandidateLink(activity_id=activity.id, activity_name=activity.name, score=0.85, reason="Inferred earlier pump state from alignment claim"))
                     updates.append(ProposedUpdate(activity_id=activity.id, activity_name=activity.name, field="status", before=activity.status, after="COMPLETE", state="COMPLETE", evidence_event_id=event.id, inferred=True))
     return links, updates, unmatched
+
+
+def _reconcile_evidence(
+    raw_updates: list[ProposedUpdate],
+    events: list[Event],
+    schedule: Schedule,
+) -> tuple[list[ProposedUpdate], list[SourceConflict], list[TimeConflict]]:
+    """Collapse duplicate activity claims while retaining every source of evidence."""
+    event_by_id = {event.id: event for event in events}
+    activity_by_id = {activity.id: activity for activity in schedule.activities}
+    grouped: dict[tuple[str, str], list[ProposedUpdate]] = defaultdict(list)
+    for update in raw_updates:
+        grouped[(update.activity_id, update.field)].append(update)
+
+    updates: list[ProposedUpdate] = []
+    conflicts: list[SourceConflict] = []
+    time_conflicts: list[TimeConflict] = []
+    for (activity_id, field), claims in grouped.items():
+        activity = activity_by_id[activity_id]
+        claim_events = [event_by_id[claim.evidence_event_id] for claim in claims]
+        event_ids = list(dict.fromkeys(event.id for event in claim_events))
+        states = list(dict.fromkeys(claim.after for claim in claims))
+        completion_blocked_conflict = {"COMPLETE", "BLOCKED"}.issubset(states)
+        resolved_state = "PARTIAL" if completion_blocked_conflict else states[-1]
+        if completion_blocked_conflict:
+            conflicts.append(SourceConflict(
+                activity_id=activity_id,
+                activity_name=activity.name,
+                field=field,
+                claims=[SourceClaim(
+                    source_id=event.source_id,
+                    event_id=event.id,
+                    state=event.state,
+                    text=event.raw_text,
+                ) for event in claim_events],
+            ))
+
+        intervals = [interval for event in claim_events for interval in (
+            event.time_conflicts if event.time_conflicts else ([event.time_interval] if event.time_interval else [])
+        )]
+        merged_interval = intersect_intervals(intervals)
+        if intervals and merged_interval is None:
+            time_conflicts.append(TimeConflict(
+                activity_id=activity_id,
+                activity_name=activity.name,
+                event_ids=event_ids,
+                source_ids=list(dict.fromkeys(event.source_id for event in claim_events)),
+                intervals=intervals,
+            ))
+
+        first = claims[0]
+        updates.append(first.model_copy(update={
+            "after": resolved_state,
+            "state": resolved_state,
+            "evidence_event_ids": event_ids,
+            "time_interval": merged_interval,
+        }))
+    return updates, conflicts, time_conflicts
 
 
 def verify(updates: list[ProposedUpdate], events: list[Event], schedule: Schedule, *, received_at: date | None = None) -> tuple[list[RuleResult], str]:
@@ -112,18 +217,101 @@ class DemoStore:
         self.schedules[schedule.id] = schedule
         return schedule
 
-    def process(self, schedule_id: str, text: str, *, area: str | None = None, received_at: date | None = None) -> Workspace:
+    def process(
+        self,
+        schedule_id: str,
+        text: str,
+        *,
+        area: str | None = None,
+        received_at: date | None = None,
+        source_kind: SourceKind = "MESSAGE",
+        filename: str | None = None,
+        report_id: str | None = None,
+    ) -> Workspace:
+        if schedule_id not in self.schedules:
+            raise KeyError(schedule_id)
+        source = Source(
+            kind=source_kind,
+            filename=filename,
+            text=text,
+            received_at=received_at or date.today(),
+        )
+        if report_id is not None:
+            return self.append_source(report_id, source, area=area)
+
+        report_id = f"report-{uuid4().hex[:12]}"
+        return self._compile(report_id, schedule_id, [source], area=area)
+
+    def append_source(self, report_id: str, source: Source, *, area: str | None = None) -> Workspace:
+        workspace = self.workspaces.get(report_id)
+        if workspace is None:
+            raise KeyError(report_id)
+        if not workspace.patches or workspace.patches[0].status != "PENDING":
+            raise ValueError("Sources can only be added while the current patch is pending.")
+
+        previous_patch = workspace.patches[0]
+        previous_patch.status = "SUPERSEDED"
+        self.audit[previous_patch.id].append({"action": "SOURCE_ADDED", "status": "SUPERSEDED", "source_id": source.id})
+        self.audit[previous_patch.id].append({"action": "PATCH_REVISED", "status": "SUPERSEDED"})
+        return self._compile(
+            report_id,
+            previous_patch.schedule_id,
+            [*workspace.sources, source],
+            area=area,
+            revision=previous_patch.revision + 1,
+            patch_history=workspace.patches,
+        )
+
+    def _compile(
+        self,
+        report_id: str,
+        schedule_id: str,
+        sources: list[Source],
+        *,
+        area: str | None,
+        revision: int = 1,
+        patch_history: list[Patch] | None = None,
+    ) -> Workspace:
         schedule = self.schedules[schedule_id]
-        events = extract_events(text, area=area, received_at=received_at)
-        links, updates, unmatched = link_and_compile(events, schedule)
-        rules, tier = verify(updates, events, schedule, received_at=received_at)
+        events: list[Event] = []
+        for source in sources:
+            events.extend(extract_events(
+                source.text,
+                area=area,
+                received_at=source.received_at,
+                source_id=source.id,
+            ))
+        links, raw_updates, unmatched = link_and_compile(events, schedule)
+        updates, conflicts, time_conflicts = _reconcile_evidence(raw_updates, events, schedule)
+        rules, tier = verify(updates, events, schedule, received_at=sources[-1].received_at if sources else None)
+        if conflicts:
+            tier = "PLANNER"
+        if time_conflicts:
+            tier = "PLANNER"
         if unmatched and not updates:
             tier = "PLANNER"
-        report_id = f"report-{uuid4().hex[:12]}"
-        patch = Patch(report_id=report_id, schedule_id=schedule_id, updates=updates, rules=rules, approval_tier=tier, evidence=[text])
-        workspace = Workspace(report_id=report_id, source_text=text, events=events, links=links, patches=[patch], unmatched_work=unmatched)
+        patch = Patch(
+            report_id=report_id,
+            schedule_id=schedule_id,
+            updates=updates,
+            rules=rules,
+            approval_tier=tier,
+            evidence=[source.text for source in sources],
+            revision=revision,
+        )
+        workspace = Workspace(
+            report_id=report_id,
+            source_text=sources[0].text if sources else "",
+            sources=sources,
+            events=events,
+            links=links,
+            patches=[patch, *(patch_history or [])],
+            unmatched_work=unmatched,
+            conflicts=conflicts,
+            time_conflicts=time_conflicts,
+        )
         self.workspaces[report_id] = workspace
-        self.audit[patch.id].append({"action": "PATCH_CREATED", "status": "PENDING"})
+        self.audit[patch.id].append({"action": "PATCH_CREATED", "status": "PENDING", "revision": str(revision)})
         return workspace
 
     def patch_action(self, patch_id: str, action: str) -> Patch:
