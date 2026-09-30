@@ -13,6 +13,8 @@ def import_schedule() -> str:
     with (DATA / "project_schedule.csv").open("rb") as handle:
         response = client.post("/schedule/import", files={"file": ("project_schedule.csv", handle, "text/csv")})
     assert response.status_code == 200
+    assert "activities" in response.json()
+    assert response.json()["activities"]
     return response.json()["schedule_id"]
 
 

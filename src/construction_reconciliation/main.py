@@ -61,6 +61,7 @@ async def import_schedule(file: UploadFile):
     return {
         **schedule_summary(schedule),
         "dependency_graph": analyze_dependency_graph(schedule),
+        "activities": [activity.model_dump() for activity in schedule.activities],
     }
 
 

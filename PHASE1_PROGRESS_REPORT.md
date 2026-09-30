@@ -46,5 +46,6 @@ The following Phase 2 demo behavior is now implemented in the current uncommitte
 - **Silent Progress and one ask-back:** successor progress with an unobserved predecessor produces a finding and a bound on the predecessor finish when a time interval is available. The UI presents one clarification question with a before distribution and updates the distribution after an answer.
 - **Accumulated quantity progress:** distinct report sources add quantities against optional planned totals on schedule activities; a report revision replaces its prior version in the rollup.
 - **AUTO approval tier:** only non-critical, forward, unambiguous updates backed by two agreeing sources and passing safety checks qualify. Other updates retain existing review tiers.
+- **Time interval display:** Progress shows each event's parsed interval on an India Standard Time day track, labeled with confidence, exact bounds, and its source. Multi-day bounds are displayed across the full track and retain their date range in the labels.
 
 These remain in-memory demo features. They do not add Supabase persistence or migrations. The Python suite currently passes 43 tests. The Next.js build was started but did not complete during this run, so frontend production-build status is unverified for these latest UI changes.

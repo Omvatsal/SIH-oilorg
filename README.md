@@ -24,6 +24,8 @@ Phase 2 adds timezone-aware evidence intervals and multi-source workspaces. Time
 
 Schedule import also returns a dependency graph (`prerequisite → dependent`) with its topological order and consistency findings. The graph analyzer is available to Python callers as `analyze_dependency_graph(schedule)` from `construction_reconciliation.demo`, and via `GET /schedule/{schedule_id}/dependencies`. It reports missing references, self-dependencies, cycles, duplicate edges, and possible finish-to-start date overlaps; findings are returned with the graph instead of rejecting the schedule import.
 
+The Progress view also displays extracted report time intervals as confidence-labeled bands on a 24-hour IST track. The exact local date and earliest/latest bounds remain visible beside each band; a range is not presented as a precise timestamp. These intervals are parsed from report phrases and narrowed by intersecting compatible evidence. Conflicting bounds stay in the punch list for planner review.
+
 ## Folder organization
 
 ```text
@@ -79,6 +81,10 @@ python -m construction_reconciliation
 ```
 
 The health endpoint is available at `http://127.0.0.1:8000/health` and returns `{"status":"ok"}`. Importing the API does not connect to PostgreSQL, run migrations, or seed data.
+
+### Demo upload data flow
+
+The frontend separates **Planned schedule** uploads from **Actual work** reports. A schedule upload is sent to `POST /schedule/import`, parsed into schedule/activity objects, and held in the API process memory under `store.schedules`. An actual work message or voice transcript is sent to `POST /ingest/message`; `.txt`, `.csv`, and `.xlsx` reports go to `POST /ingest/file`. The API extracts text/events, keeps source text and parsed events in the in-memory workspace (`store.workspaces`), and returns that workspace to the frontend. The original uploaded files are not saved. This demo does not write these uploads to PostgreSQL, Supabase, or browser storage; restarting the API clears the schedules and workspaces.
 
 Run the repeatable sample seed separately with `python -m construction_reconciliation.database.seed`. To seed and then start the development server, use `python -m construction_reconciliation --seed`. The seed command requires a configured database and an already-applied schema migration.
 
