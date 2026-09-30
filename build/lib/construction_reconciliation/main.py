@@ -86,66 +86,6 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/state")
-def current_state() -> dict[str, object]:
-    """Return the persisted demo state used to hydrate the workspace UI."""
-    schedules = []
-    for schedule in store.schedules.values():
-        schedules.append({
-            **schedule_summary(schedule),
-            "dependency_graph": analyze_dependency_graph(schedule),
-            "activities": [activity.model_dump(mode="json") for activity in schedule.activities],
-        })
-    workspaces = [workspace.model_dump(mode="json") for workspace in store.workspaces.values()]
-    return {"schedules": schedules, "workspaces": workspaces}
-
-
-def _refresh_persisted_state() -> None:
-    """Refresh the demo store lazily for API clients that connect after startup."""
-    if not persistence.enabled():
-        return
-    for schedule in persistence.load_schedules():
-        if schedule.id not in store.schedules:
-            store.add_schedule(schedule)
-
-
-@app.get("/schedules")
-def list_schedules() -> list[dict[str, object]]:
-    _refresh_persisted_state()
-    return [
-        {**schedule_summary(schedule),
-         "dependency_graph": analyze_dependency_graph(schedule),
-         "activities": [activity.model_dump(mode="json") for activity in schedule.activities]}
-        for schedule in store.schedules.values()
-    ]
-
-
-@app.get("/workspaces")
-def list_workspaces() -> list[dict[str, object]]:
-    _refresh_persisted_state()
-    if persistence.enabled() and not store.workspaces:
-        load_persisted_demo_data()
-    return [workspace.model_dump(mode="json") for workspace in store.workspaces.values()]
-
-
-@app.get("/progress/{schedule_id}")
-def schedule_progress(schedule_id: str) -> dict[str, object]:
-    _refresh_persisted_state()
-    schedule = store.schedules.get(schedule_id)
-    if schedule is None:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-    activities = schedule.activities
-    completed = sum(activity.status == "COMPLETE" for activity in activities)
-    graph = analyze_dependency_graph(schedule)
-    related = [w for w in store.workspaces.values() if w.patches and w.patches[0].schedule_id == schedule_id]
-    conflicts = [conflict.model_dump(mode="json") for workspace in related for conflict in workspace.conflicts]
-    pending = sum(1 for workspace in related for patch in workspace.patches if patch.status == "PENDING")
-    return {"schedule_id": schedule_id, "activity_count": len(activities),
-            "completed_count": completed, "completion_percent": (completed / len(activities) * 100 if activities else 0),
-            "dependency_graph": graph, "conflicts": conflicts, "pending_approvals": pending,
-            "reports": len(related), "events": sum(len(w.events) for w in related)}
-
-
 @app.post("/schedule/import")
 async def import_schedule(file: UploadFile):
     suffix = (file.filename or "").lower().rsplit(".", 1)[-1]

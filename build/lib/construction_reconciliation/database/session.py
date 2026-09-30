@@ -1,5 +1,4 @@
 from functools import lru_cache
-from urllib.parse import quote
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -15,26 +14,9 @@ class DatabaseNotConfiguredError(RuntimeError):
     """Raised when a database operation is attempted without DATABASE_URL."""
 
 
-def _normalize_database_url(value: str) -> str:
-    """Percent-encode a password containing URL-reserved characters.
-
-    Supabase passwords commonly contain ``@`` or ``#``. Keeping this fix here
-    means existing .env files continue to work without copying credentials into
-    application code or logs.
-    """
-    if "://" not in value or "@" not in value:
-        return value
-    scheme, remainder = value.split("://", 1)
-    userinfo, host = remainder.rsplit("@", 1)
-    if ":" not in userinfo:
-        return value
-    username, password = userinfo.split(":", 1)
-    return f"{scheme}://{username}:{quote(password, safe='%')}@{host}"
-
-
 @lru_cache
 def get_engine():
-    database_url = _normalize_database_url(get_settings().database_url.strip())
+    database_url = get_settings().database_url.strip()
     if not database_url:
         raise DatabaseNotConfiguredError(
             "DATABASE_URL is empty. Set it in the project .env file first."

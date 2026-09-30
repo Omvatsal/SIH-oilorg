@@ -51,7 +51,7 @@ System sans keeps labels and reports legible without a network font dependency. 
 
 ## Layout
 
-A desktop sidebar and mobile bottom navigation keep the four destinations stable. Main content is bounded and uses task-specific grids, while long tables own their own scroll area. Mobile pages scroll naturally above the navigation. Controls and notifications retain their dimensions as state changes.
+A desktop sidebar and mobile bottom navigation keep the four destinations stable. The desktop sidebar may collapse to centered icons; hovering temporarily expands it and its pin control sets the persistent state. Main content is bounded and uses task-specific grids, while long tables own their own scroll area. Mobile pages scroll naturally above the navigation. Controls and notifications retain their dimensions as state changes.
 
 ## Elevation & Depth
 

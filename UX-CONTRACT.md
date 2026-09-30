@@ -22,7 +22,18 @@ The frontend is a four-step workspace: Import, Reports, Review, Schedule. The Fa
 - The legacy `/workspace?view=` URL redirects to the matching route. The landing page has been replaced by the task workspace.
 - Report uploads accept up to ten queued TXT, CSV, or XLSX files, 15 MB each. Uploads are sequential; files confirmed by the API leave the queue while the rest remain available after an error.
 - The Schedule view uses the activity records returned by schedule import for planned dates, status, overdue flags, and the dependency map.
+- The legacy `/workspace?view=` route redirects to its corresponding modular route. With no saved browser session, the workspace loads the latest schedule and report from the API's `/schedules` and `/workspaces` endpoints.
+- On desktop, the sidebar pin collapses or keeps the navigation open. A collapsed sidebar shows centered icons; pointer hover expands it temporarily. The pin control is hidden while collapsed and returns on hover expansion.
+- The dependency map scrolls inside its own surface. Ctrl/Command + mouse-wheel and two-finger pinch zoom the graph without scaling the page.
+- Progress and review views distinguish completed updates, overdue activities, pending approvals, dependency findings, evidence conflicts, unmatched work, and open clarification questions when those records are returned by the API.
 
 ## Responsive Behavior
 
-The desktop sidebar and mobile bottom navigation expose the same destinations. Review decisions follow the evidence on narrow screens. Long schedule tables scroll within their own surface; report forms use normal page scrolling.
+The desktop sidebar and mobile bottom navigation expose the same destinations. Review decisions follow the evidence on narrow screens. Long schedule tables scroll within their own surface; dependency graphs own their zoom and overflow interactions; report forms use normal page scrolling.
+
+## Progress and prototype boundaries
+
+- The Schedule route shows the imported activity list and dependency graph. Progress findings use actual persisted report events and patch states where available.
+- Reported time ranges use India Standard Time and confidence labels. A time bar represents an interval, not an exact timestamp.
+- The application does not claim a project completion forecast or CPM critical-path delay unless the API supplies that calculation.
+- Institutional history is limited to records available from the current API; the UI does not invent historical decisions.

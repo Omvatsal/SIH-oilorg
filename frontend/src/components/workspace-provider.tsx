@@ -35,7 +35,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const saved = sessionStorage.getItem(STORAGE_KEY);
-    if (!saved) { setReady(true); return; }
+    if (!saved) {
+      Promise.all([api<Summary[]>("/schedules"), api<Workspace[]>("/workspaces")]).then(([schedules, reports]) => {
+        const latestSchedule = schedules.at(-1);
+        if (latestSchedule) setSummary(latestSchedule);
+        const latestReport = reports.at(-1);
+        if (latestReport) setWorkspace(latestReport);
+      }).catch(() => { /* Keep the import view available when the API is offline. */ }).finally(() => setReady(true));
+      return;
+    }
     let parsed: { summary: Summary; reportId?: string; message?: string; reportDate?: string; area?: string };
     try { parsed = JSON.parse(saved); } catch { sessionStorage.removeItem(STORAGE_KEY); setReady(true); return; }
     setMessage(parsed.message ?? "");
