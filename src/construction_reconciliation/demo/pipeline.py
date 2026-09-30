@@ -10,8 +10,11 @@ from uuid import uuid4
 from construction_reconciliation.demo.importer import TAG_RE
 from construction_reconciliation.demo.models import (
     CandidateLink,
+    AskBackOutcome,
+    AskBackQuestion,
     Event,
     Patch,
+    QuantityProgress,
     ProposedUpdate,
     RuleResult,
     Schedule,
@@ -20,6 +23,8 @@ from construction_reconciliation.demo.models import (
     SourceConflict,
     SourceKind,
     SourceSpan,
+    SilentProgressFinding,
+    StateProbability,
     TimeConflict,
     TimeInterval,
     Workspace,
@@ -206,6 +211,172 @@ def verify(updates: list[ProposedUpdate], events: list[Event], schedule: Schedul
     return rules, tier
 
 
+def _can_auto_approve(
+    updates: list[ProposedUpdate],
+    events: list[Event],
+    schedule: Schedule,
+    conflicts: list[SourceConflict],
+    time_conflicts: list[TimeConflict],
+    unmatched: list[Event],
+    silent_progress: list[SilentProgressFinding],
+) -> bool:
+    """Require safe rules and two independent, agreeing sources per change."""
+    if not updates or conflicts or time_conflicts or unmatched or silent_progress:
+        return False
+    activities = {activity.id: activity for activity in schedule.activities}
+    event_by_id = {event.id: event for event in events}
+    by_activity: dict[str, list[ProposedUpdate]] = defaultdict(list)
+    for update in updates:
+        activity = activities[update.activity_id]
+        if activity.is_critical or update.inferred or update.state not in {"COMPLETE", "PROGRESS"}:
+            return False
+        if update.state == "PROGRESS" and activity.status == "COMPLETE":
+            return False
+        by_activity[update.activity_id].append(update)
+    for activity_updates in by_activity.values():
+        states_by_source: dict[str, set[str]] = defaultdict(set)
+        for update in activity_updates:
+            for event_id in update.evidence_event_ids or [update.evidence_event_id]:
+                event = event_by_id[event_id]
+                states_by_source[event.source_id].add(update.state)
+        agreeing_sources = [states for states in states_by_source.values() if states == {activity_updates[0].state}]
+        if len(agreeing_sources) < 2:
+            return False
+    return True
+
+
+def _silent_progress_findings(
+    schedule: Schedule,
+    current_events: list[Event],
+    current_links: dict[str, list[CandidateLink]],
+    current_updates: list[ProposedUpdate],
+    previously_observed_activity_ids: set[str],
+) -> list[SilentProgressFinding]:
+    """Find reported successor progress whose predecessor has no report evidence."""
+    activities = {activity.id: activity for activity in schedule.activities}
+    events_by_id = {event.id: event for event in current_events}
+    observed_ids = set(previously_observed_activity_ids)
+    observed_ids.update(
+        candidate.activity_id
+        for candidates in current_links.values()
+        for candidate in candidates
+    )
+    findings: list[SilentProgressFinding] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    for update in current_updates:
+        if update.state not in {"STARTED", "PROGRESS", "COMPLETE"}:
+            continue
+        successor = activities.get(update.activity_id)
+        event = events_by_id.get(update.evidence_event_id)
+        if successor is None or event is None:
+            continue
+        for predecessor_id in successor.predecessors:
+            predecessor = activities.get(predecessor_id)
+            if predecessor is None or predecessor.status == "COMPLETE" or predecessor_id in observed_ids:
+                continue
+            key = (predecessor_id, successor.id, event.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            start_interval = event.time_interval
+            findings.append(SilentProgressFinding(
+                predecessor_activity_id=predecessor.id,
+                predecessor_activity_name=predecessor.name,
+                successor_activity_id=successor.id,
+                successor_activity_name=successor.name,
+                successor_event_id=event.id,
+                source_id=event.source_id,
+                successor_start_interval=start_interval,
+                predecessor_finish_upper_bound=start_interval.latest if start_interval else None,
+            ))
+
+    findings.sort(key=lambda item: (item.successor_activity_id, item.predecessor_activity_id, item.successor_event_id))
+    return findings
+
+
+def _scripted_ask_back(finding: SilentProgressFinding) -> AskBackQuestion:
+    """Build the demo's binary predecessor-confirmation question and distribution."""
+    before = [
+        StateProbability(candidate="PREDECESSOR_COMPLETE", probability=0.5),
+        StateProbability(candidate="PREDECESSOR_INCOMPLETE", probability=0.5),
+    ]
+    return AskBackQuestion(
+        id=f"ask-{finding.successor_event_id}-{finding.predecessor_activity_id}",
+        predecessor_activity_id=finding.predecessor_activity_id,
+        successor_activity_id=finding.successor_activity_id,
+        successor_event_id=finding.successor_event_id,
+        question=(
+            f"Was {finding.predecessor_activity_name} completed before "
+            f"{finding.successor_activity_name} started?"
+        ),
+        candidate_distribution_before=before,
+        outcomes=[
+            AskBackOutcome(answer="YES", distribution=[
+                StateProbability(candidate="PREDECESSOR_COMPLETE", probability=1.0),
+                StateProbability(candidate="PREDECESSOR_INCOMPLETE", probability=0.0),
+            ]),
+            AskBackOutcome(answer="NO", distribution=[
+                StateProbability(candidate="PREDECESSOR_COMPLETE", probability=0.0),
+                StateProbability(candidate="PREDECESSOR_INCOMPLETE", probability=1.0),
+            ]),
+        ],
+        information_gain_bits=1.0,
+    )
+
+
+def _quantity_progress(
+    schedule: Schedule,
+    events: list[Event],
+    links: dict[str, list[CandidateLink]],
+    prior_workspaces: list[Workspace],
+) -> list[QuantityProgress]:
+    """Roll up distinct quantity evidence across active reports for a schedule."""
+    activity_by_id = {activity.id: activity for activity in schedule.activities}
+    totals: dict[str, float] = defaultdict(float)
+    event_ids: dict[str, list[str]] = defaultdict(list)
+    seen: set[tuple[str, int, str, str]] = set()
+
+    def add(event: Event, candidates: list[CandidateLink]) -> None:
+        if event.quantity is None or not event.quantity_unit:
+            return
+        ranked = sorted(candidates, key=lambda candidate: candidate.score, reverse=True)
+        if not ranked or (len(ranked) > 1 and ranked[0].score == ranked[1].score):
+            return
+        activity_id = ranked[0].activity_id
+        unit = event.quantity_unit.casefold().rstrip("s")
+        identity = (activity_id, int(event.quantity * 1000), unit, event.source_id)
+        if identity in seen:
+            return
+        seen.add(identity)
+        totals[activity_id] += event.quantity
+        event_ids[activity_id].append(event.id)
+
+    for workspace in prior_workspaces:
+        for event in workspace.events:
+            add(event, workspace.links.get(event.id, []))
+    for event in events:
+        add(event, links.get(event.id, []))
+
+    result = []
+    for activity_id in sorted(totals):
+        activity = activity_by_id[activity_id]
+        planned = activity.quantity_total
+        observed = totals[activity_id]
+        result.append(QuantityProgress(
+            activity_id=activity_id,
+            activity_name=activity.name,
+            observed_quantity=observed,
+            quantity_unit=activity.quantity_unit or next(
+                (event.quantity_unit or "units" for event in events if event.id in event_ids[activity_id]), "units"
+            ),
+            planned_quantity=planned,
+            percent_complete=min(100.0, observed / planned * 100) if planned and planned > 0 else None,
+            evidence_event_ids=event_ids[activity_id],
+        ))
+    return result
+
+
 class DemoStore:
     def __init__(self) -> None:
         self.schedules: dict[str, Schedule] = {}
@@ -260,6 +431,7 @@ class DemoStore:
             area=area,
             revision=previous_patch.revision + 1,
             patch_history=workspace.patches,
+            replacing_report_id=report_id,
         )
 
     def _compile(
@@ -271,6 +443,7 @@ class DemoStore:
         area: str | None,
         revision: int = 1,
         patch_history: list[Patch] | None = None,
+        replacing_report_id: str | None = None,
     ) -> Workspace:
         schedule = self.schedules[schedule_id]
         events: list[Event] = []
@@ -283,7 +456,42 @@ class DemoStore:
             ))
         links, raw_updates, unmatched = link_and_compile(events, schedule)
         updates, conflicts, time_conflicts = _reconcile_evidence(raw_updates, events, schedule)
+        previously_observed_activity_ids = {
+            candidate.activity_id
+            for existing in self.workspaces.values()
+            if existing.report_id != report_id
+            and existing.patches
+            and existing.patches[0].status not in {"REJECTED", "UNDONE", "SUPERSEDED"}
+            and existing.patches[0].schedule_id == schedule_id
+            for candidates in existing.links.values()
+            for candidate in candidates
+        }
+        prior_quantity_workspaces = [
+            existing for existing in self.workspaces.values()
+            if existing.report_id != report_id and existing.patches
+            and existing.patches[0].status not in {"REJECTED", "UNDONE", "SUPERSEDED"}
+            and existing.patches[0].schedule_id == schedule_id
+        ]
+        quantity_progress = _quantity_progress(schedule, events, links, prior_quantity_workspaces)
+        silent_progress = _silent_progress_findings(
+            schedule, events, links, updates, previously_observed_activity_ids
+        )
+        ask_back_questions = [_scripted_ask_back(silent_progress[0])] if silent_progress else []
         rules, tier = verify(updates, events, schedule, received_at=sources[-1].received_at if sources else None)
+        agreement_updates = [
+            update.model_copy(update={"evidence_event_id": event_id})
+            for update in updates
+            for event_id in (update.evidence_event_ids or [update.evidence_event_id])
+        ]
+        if _can_auto_approve(updates, events, schedule, conflicts, time_conflicts, unmatched, silent_progress):
+            # Only the tier decision considers prior revision evidence; an ordinary
+            # single-source workspace remains CONFIRM.
+            safety_updates = [update for update in agreement_updates if update.state not in {"STARTED", "PROGRESS", "COMPLETE"} or not any(
+                predecessor in {candidate.activity_id for candidate in agreement_updates}
+                for predecessor in next(activity for activity in schedule.activities if activity.id == update.activity_id).predecessors
+            )]
+            if _can_auto_approve(safety_updates, events, schedule, conflicts, time_conflicts, unmatched, silent_progress):
+                tier = "AUTO"
         if conflicts:
             tier = "PLANNER"
         if time_conflicts:
@@ -309,10 +517,27 @@ class DemoStore:
             unmatched_work=unmatched,
             conflicts=conflicts,
             time_conflicts=time_conflicts,
+            silent_progress=silent_progress,
+            ask_back_questions=ask_back_questions,
+            quantity_progress=quantity_progress,
         )
         self.workspaces[report_id] = workspace
         self.audit[patch.id].append({"action": "PATCH_CREATED", "status": "PENDING", "revision": str(revision)})
         return workspace
+
+    def answer_question(self, report_id: str, question_id: str, answer: str) -> AskBackQuestion:
+        if answer not in {"YES", "NO"}:
+            raise ValueError("Answer must be YES or NO.")
+        workspace = self.workspaces.get(report_id)
+        if workspace is None:
+            raise KeyError(report_id)
+        question = next((item for item in workspace.ask_back_questions if item.id == question_id), None)
+        if question is None:
+            raise KeyError(question_id)
+        outcome = next(item for item in question.outcomes if item.answer == answer)
+        question.selected_answer = answer
+        question.candidate_distribution_after = [item.model_copy() for item in outcome.distribution]
+        return question
 
     def patch_action(self, patch_id: str, action: str) -> Patch:
         for workspace in self.workspaces.values():

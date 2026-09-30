@@ -51,6 +51,9 @@ def _activity(row: dict[str, str]) -> Activity:
         discipline=row.get("discipline", "GENERAL"), area=row.get("area", ""),
         planned_start=row.get("planned_start") or None, planned_finish=row.get("planned_finish") or None,
         predecessors=predecessors, object_tag=tag, action=action,
+        quantity_total=float(row["quantity_total"]) if row.get("quantity_total", "").strip() else None,
+        quantity_unit=row.get("quantity_unit", "").strip() or None,
+        is_critical=row.get("is_critical", "").strip().casefold() in {"1", "true", "yes", "y"},
     )
 
 
@@ -69,9 +72,6 @@ def _validate_activities(activities: list[Activity]) -> None:
     ids = {activity.id for activity in activities}
     if len(ids) != len(activities):
         raise ValueError("Schedule contains duplicate activity ids.")
-    for activity in activities:
-        if activity.id in activity.predecessors:
-            raise ValueError(f"Activity {activity.id} cannot depend on itself.")
 
 
 def import_xer(content: str) -> Schedule:
@@ -94,11 +94,18 @@ def import_xer(content: str) -> Schedule:
     wbs_names = {row.get("wbs_id", ""): row.get("wbs_short_name", "") for row in tables["PROJWBS"]}
     task_code_by_id = {row.get("task_id", ""): row.get("task_code", row.get("id", "")) for row in tables["TASK"]}
     predecessors: dict[str, list[str]] = {}
+    unresolved_dependency_edges: list[tuple[str, str]] = []
     for relation in tables["TASKPRED"]:
-        successor = task_code_by_id.get(relation.get("task_id", ""), "")
-        predecessor = task_code_by_id.get(relation.get("pred_task_id", ""), "")
-        if successor and predecessor:
-            predecessors.setdefault(successor, []).append(predecessor)
+        raw_successor = relation.get("task_id", "")
+        raw_predecessor = relation.get("pred_task_id", "")
+        successor = task_code_by_id.get(raw_successor, "")
+        predecessor = task_code_by_id.get(raw_predecessor, "")
+        if successor:
+            # Keep an unresolved predecessor ID for graph validation instead of
+            # silently dropping the broken TASKPRED row.
+            predecessors.setdefault(successor, []).append(predecessor or raw_predecessor)
+        elif raw_successor:
+            unresolved_dependency_edges.append((predecessor or raw_predecessor, raw_successor))
     rows = []
     for row in tables["TASK"]:
         activity_id = row.get("activity_id") or row.get("task_code") or row.get("id", "")
@@ -111,10 +118,17 @@ def import_xer(content: str) -> Schedule:
             "planned_start": (row.get("planned_start") or row.get("target_start_date") or "")[:10],
             "planned_finish": (row.get("planned_finish") or row.get("target_end_date") or "")[:10],
             "predecessors": row.get("predecessors") or ",".join(predecessors.get(activity_id, [])),
+            "quantity_total": row.get("quantity_total", ""),
+            "quantity_unit": row.get("quantity_unit", ""),
+            "is_critical": row.get("is_critical", ""),
         })
     activities = [_activity(row) for row in rows]
     _validate_activities(activities)
-    return Schedule(activities=activities, source_format="xer")
+    return Schedule(
+        activities=activities,
+        source_format="xer",
+        unresolved_dependency_edges=unresolved_dependency_edges,
+    )
 
 
 def schedule_summary(schedule: Schedule) -> dict[str, int | str]:

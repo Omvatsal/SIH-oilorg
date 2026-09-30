@@ -14,11 +14,15 @@ p { line-height: 1.45; }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
 button { background: var(--color-primary); color: var(--color-on-primary); border: 0; border-radius: var(--radius-control); padding: 10px 14px; font: inherit; font-weight: bold; cursor: pointer; min-height: 44px; }
 button.secondary { background: var(--color-muted); }
+button.recording { background: var(--color-block); }
 button:disabled { opacity: .55; cursor: not-allowed; }
 button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid var(--color-ask); outline-offset: 2px; }
 textarea, input[type="file"], input[type="date"], input[type="text"] { width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-control); padding: 10px; font: inherit; }
 input[type="date"], input[type="text"] { display: block; margin: 4px 0 10px; }
 textarea { min-height: 140px; resize: vertical; }
+.voice-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.voice-controls span { font-size: .85rem; }
+.recording-status { color: var(--color-block); font-weight: bold; }
 input[type="file"] { margin: 8px 0; }
 .row { padding: 10px 0; border-bottom: 1px solid var(--color-border); line-height: 1.45; }
 .row:last-child { border-bottom: 0; }

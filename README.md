@@ -22,6 +22,8 @@ Run the focused tests with `pytest tests/demo -q`. The frontend production check
 
 Phase 2 adds timezone-aware evidence intervals and multi-source workspaces. Time phrases use `Asia/Kolkata`; overlapping evidence narrows to an intersection, while disjoint ranges remain visible for planner review. To exercise the conflict route, upload `src/construction_reconciliation/demo_data/conflict_dpr.xlsx`, then append the text from `p201_discharge_blocked_chat.txt` in the same workspace. The revised patch retains both sources, supersedes revision 1, proposes `PARTIAL` for L6-424, and requires planner review.
 
+Schedule import also returns a dependency graph (`prerequisite → dependent`) with its topological order and consistency findings. The graph analyzer is available to Python callers as `analyze_dependency_graph(schedule)` from `construction_reconciliation.demo`, and via `GET /schedule/{schedule_id}/dependencies`. It reports missing references, self-dependencies, cycles, duplicate edges, and possible finish-to-start date overlaps; findings are returned with the graph instead of rejecting the schedule import.
+
 ## Folder organization
 
 ```text

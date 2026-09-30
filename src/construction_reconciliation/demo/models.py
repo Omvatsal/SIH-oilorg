@@ -61,6 +61,50 @@ class TimeConflict(BaseModel):
     intervals: list[TimeInterval]
 
 
+class SilentProgressFinding(BaseModel):
+    predecessor_activity_id: str
+    predecessor_activity_name: str
+    successor_activity_id: str
+    successor_activity_name: str
+    successor_event_id: str
+    source_id: str
+    successor_start_interval: TimeInterval | None = None
+    predecessor_finish_upper_bound: datetime | None = None
+
+
+class QuantityProgress(BaseModel):
+    activity_id: str
+    activity_name: str
+    observed_quantity: float
+    quantity_unit: str
+    planned_quantity: float | None = None
+    percent_complete: float | None = None
+    evidence_event_ids: list[str] = Field(default_factory=list)
+
+
+class StateProbability(BaseModel):
+    candidate: Literal["PREDECESSOR_COMPLETE", "PREDECESSOR_INCOMPLETE"]
+    probability: float
+
+
+class AskBackOutcome(BaseModel):
+    answer: Literal["YES", "NO"]
+    distribution: list[StateProbability]
+
+
+class AskBackQuestion(BaseModel):
+    id: str
+    predecessor_activity_id: str
+    successor_activity_id: str
+    successor_event_id: str
+    question: str
+    candidate_distribution_before: list[StateProbability]
+    outcomes: list[AskBackOutcome]
+    information_gain_bits: float
+    selected_answer: Literal["YES", "NO"] | None = None
+    candidate_distribution_after: list[StateProbability] = Field(default_factory=list)
+
+
 class Activity(BaseModel):
     id: str
     name: str
@@ -73,12 +117,16 @@ class Activity(BaseModel):
     object_tag: str | None = None
     action: str = ""
     status: str = "NOT_STARTED"
+    quantity_total: float | None = None
+    quantity_unit: str | None = None
+    is_critical: bool = False
 
 
 class Schedule(BaseModel):
     id: str = Field(default_factory=lambda: f"schedule-{uuid4().hex[:8]}")
     activities: list[Activity]
     source_format: Literal["csv", "xer"]
+    unresolved_dependency_edges: list[tuple[str, str]] = Field(default_factory=list)
 
 
 class SourceSpan(BaseModel):
@@ -153,4 +201,7 @@ class Workspace(BaseModel):
     unmatched_work: list[Event]
     conflicts: list[SourceConflict] = Field(default_factory=list)
     time_conflicts: list[TimeConflict] = Field(default_factory=list)
+    silent_progress: list[SilentProgressFinding] = Field(default_factory=list)
+    ask_back_questions: list[AskBackQuestion] = Field(default_factory=list)
+    quantity_progress: list[QuantityProgress] = Field(default_factory=list)
 

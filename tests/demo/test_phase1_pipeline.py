@@ -3,7 +3,7 @@ from datetime import date
 
 from construction_reconciliation.demo.importer import import_csv, import_xer
 from construction_reconciliation.demo.pipeline import DemoStore, extract_events, verify, link_and_compile
-from construction_reconciliation.demo.models import Event, ProposedUpdate
+from construction_reconciliation.demo.models import Event, ProposedUpdate, Source
 
 
 DATA = Path(__file__).parents[2] / "src" / "construction_reconciliation" / "demo_data"
@@ -128,3 +128,15 @@ def test_patch_reject_preserves_schedule_and_invalid_transition_fails():
     import pytest
     with pytest.raises(ValueError, match="Only accepted"):
         store.patch_action(patch.id, "undo")
+
+
+def test_auto_tier_requires_two_independent_agreeing_sources_and_logs_acceptance():
+    store = DemoStore()
+    schedule = store.add_schedule(csv_schedule())
+    first = store.process(schedule.id, '24"-P-112 erection started; 6 spools erected today.', area="Unit-2")
+    revised = store.append_source(first.report_id, Source(
+        kind="MESSAGE", text='24"-P-112 erection started; 6 spools erected today.', received_at=date(2026, 9, 30),
+    ), area="Unit-2")
+    patch = revised.patches[0]
+    assert patch.approval_tier == "AUTO"
+    assert store.patch_action(patch.id, "accept").status == "ACCEPTED"

@@ -90,3 +90,65 @@ def test_single_source_request_still_creates_new_workspace():
     assert len(workspace["sources"]) == 1
     assert workspace["patches"][0]["revision"] == 1
     assert workspace["patches"][0]["updates"][0]["after"] == "COMPLETE"
+
+
+def test_silent_progress_finding_and_ask_back_answer_update_distribution():
+    schedule_id = import_schedule()
+    response = client.post("/ingest/message", json={
+        "schedule_id": schedule_id,
+        "text": 'Hydrotest 24"-P-112 completed today at 10:00.',
+        "area": "Unit-2",
+        "received_at": "2026-09-30",
+    })
+    assert response.status_code == 200
+    workspace = response.json()
+    finding = workspace["silent_progress"][0]
+    assert finding["predecessor_activity_id"] == "L6-503"
+    question = workspace["ask_back_questions"][0]
+    assert question["candidate_distribution_before"] == [
+        {"candidate": "PREDECESSOR_COMPLETE", "probability": 0.5},
+        {"candidate": "PREDECESSOR_INCOMPLETE", "probability": 0.5},
+    ]
+    answer = client.post(
+        f"/workspace/{workspace['report_id']}/questions/{question['id']}/answer",
+        json={"answer": "yes"},
+    )
+    assert answer.status_code == 200
+    after = answer.json()
+    assert after["selected_answer"] == "YES"
+    assert [item["probability"] for item in after["candidate_distribution_after"]] == [1.0, 0.0]
+
+
+def test_quantity_progress_accumulates_distinct_reports_without_append_double_count():
+    schedule_id = import_schedule()
+    first = client.post("/ingest/message", json={
+        "schedule_id": schedule_id,
+        "text": '24"-P-112 erection started; 6 spools erected today.',
+        "area": "Unit-2",
+        "received_at": "2026-09-30",
+    }).json()
+    progress = first["quantity_progress"][0]
+    assert progress["activity_id"] == "L6-501"
+    assert progress["observed_quantity"] == 6
+    assert progress["planned_quantity"] == 40
+    appended = client.post("/ingest/message", json={
+        "schedule_id": schedule_id,
+        "report_id": first["report_id"],
+        "text": '24"-P-112 erection started; 6 spools erected today.',
+        "area": "Unit-2",
+        "received_at": "2026-09-30",
+    }).json()
+    assert appended["quantity_progress"][0]["observed_quantity"] == 12
+
+
+def test_quantity_progress_accumulates_across_workspaces():
+    schedule_id = import_schedule()
+    for quantity in (6, 6):
+        response = client.post("/ingest/message", json={
+            "schedule_id": schedule_id,
+            "text": f'24"-P-112 erection started; {quantity} spools erected today.',
+            "area": "Unit-2",
+            "received_at": "2026-09-30",
+        })
+        assert response.status_code == 200
+    assert response.json()["quantity_progress"][0]["observed_quantity"] == 12

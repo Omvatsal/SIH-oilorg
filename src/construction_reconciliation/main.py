@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from construction_reconciliation.demo.importer import import_csv, import_xer, schedule_summary
+from construction_reconciliation.demo.dependency_graph import analyze_dependency_graph
 from construction_reconciliation.demo.pipeline import DemoStore
 
 PRODUCT_NAME = os.getenv("PRODUCT_NAME", "SETU")
@@ -29,6 +30,10 @@ class MessageRequest(BaseModel):
     area: str | None = None
     received_at: date | None = None
     report_id: str | None = None
+
+
+class AskBackAnswerRequest(BaseModel):
+    answer: str
 
 
 @app.get("/api/config")
@@ -53,7 +58,19 @@ async def import_schedule(file: UploadFile):
     except (KeyError, UnicodeDecodeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     store.add_schedule(schedule)
-    return schedule_summary(schedule)
+    return {
+        **schedule_summary(schedule),
+        "dependency_graph": analyze_dependency_graph(schedule),
+    }
+
+
+@app.get("/schedule/{schedule_id}/dependencies")
+def get_schedule_dependencies(schedule_id: str):
+    """Return the complete graph and consistency findings for one schedule."""
+    schedule = store.schedules.get(schedule_id)
+    if schedule is None:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return analyze_dependency_graph(schedule)
 
 
 @app.post("/ingest/message")
@@ -113,6 +130,16 @@ def get_workspace(report_id: str):
         return store.workspaces[report_id]
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Report not found") from exc
+
+
+@app.post("/workspace/{report_id}/questions/{question_id}/answer")
+def answer_ask_back(report_id: str, question_id: str, payload: AskBackAnswerRequest):
+    try:
+        return store.answer_question(report_id, question_id, payload.answer.upper())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Workspace or question not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _patch_action(patch_id: str, action: str):

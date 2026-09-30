@@ -1,7 +1,7 @@
 # SETU Phase 1 Progress Report
 
 **Date:** 2026-09-30  
-**Overall status:** Phase 1 offline demo implemented
+**Overall status:** Phase 1 offline demo implemented; Phase 2 demo features extended
 
 ## Scope delivered
 
@@ -37,3 +37,14 @@ The repository now contains an offline-first Phase 1 demo. It runs without Supab
 ## Explicit Phase 1 exclusions
 
 Supabase persistence, external LLM extraction, CPM delay calculations, interval times, source conflict resolution, and ask-back capabilities remain out of scope, as specified in the Phase 1 plan.
+
+## Phase 2 additions in current working tree
+
+The following Phase 2 demo behavior is now implemented in the current uncommitted working tree:
+
+- **Dependency graph checks:** schedule import returns a directed graph, topological order, and missing-link/cycle/date consistency findings; the API exposes the graph separately and the workspace UI displays its issues.
+- **Silent Progress and one ask-back:** successor progress with an unobserved predecessor produces a finding and a bound on the predecessor finish when a time interval is available. The UI presents one clarification question with a before distribution and updates the distribution after an answer.
+- **Accumulated quantity progress:** distinct report sources add quantities against optional planned totals on schedule activities; a report revision replaces its prior version in the rollup.
+- **AUTO approval tier:** only non-critical, forward, unambiguous updates backed by two agreeing sources and passing safety checks qualify. Other updates retain existing review tiers.
+
+These remain in-memory demo features. They do not add Supabase persistence or migrations. The Python suite currently passes 43 tests. The Next.js build was started but did not complete during this run, so frontend production-build status is unverified for these latest UI changes.
