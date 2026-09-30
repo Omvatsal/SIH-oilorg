@@ -1,64 +1,78 @@
 ---
 version: alpha
-name: SETU
-description: A field-first construction execution desk with the feel of a working site ledger.
+name: "SETU"
+description: "A restrained site-execution workspace for reviewing evidence against construction schedules."
 colors:
-  primary: "#B34A12"
-  background: "#FBF6EE"
-  surface: "#FFFDF8"
-  text: "#2B1D14"
-  muted: "#6E5A48"
-  success: "#3D632E"
-  warning: "#80540C"
-  danger: "#A32A1E"
+  background: "#fbf6ee"
+  surface: "#fffdf8"
+  text: "#2b1d14"
+  muted: "#6e5a48"
+  border: "#e9dbc5"
+  primary: "#b34a12"
+  success: "#4e7a3a"
+  warning: "#b7791f"
+  danger: "#a32a1e"
+  focus: "#7b4b5e"
 typography:
   sans:
-    fontFamily: "Arial, sans-serif"
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif'
   mono:
-    fontFamily: "Consolas, monospace"
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace'
 rounded:
-  DEFAULT: "8px"
-  sm: "4px"
-  md: "8px"
-  lg: "12px"
+  DEFAULT: "6px"
+  card: "8px"
 spacing:
-  app-max: "1420px"
-  section-gap: "16px"
+  page-gutter: "44px"
+  section-gap: "32px"
+components:
+  button: {}
+  panel: {}
+  badge: {}
+  table: {}
 ---
 
 # SETU Design System
 
-## Product character
+## Overview
 
-SETU is a practical tool for planners and supervisors who coordinate work between the schedule and the site. The interface should feel like a clear desk with marked-up plans: direct language, readable details, and visible work evidence. Avoid generic AI product motifs, assistant-style chat chrome, glowing gradients, and made-up forecasts.
+SETU is an operations workspace for site engineers and planners. Its reference is a well-kept construction log: evidence, activity IDs, and decisions are easy to scan, with no promotional layout inside the product. The memorable element is the clear before-and-after change row next to its source evidence. Four routes follow the user's task order: Import, Reports, Review, Schedule.
 
-## Visual direction
+The UI is English-first and uses Asia/Kolkata for reported time displays. It must remain usable on a laptop at a site office and on a phone for field reporting. The interface favors direct labels and short recovery instructions. Avoid decorative gradients, oversized statistics, nested cards, and speculative schedule visuals.
 
-- Warm paper, ink, and rust colors follow the existing runtime palette in `frontend/src/styles/palette.css` and `tokens.css`.
-- Use bold sans serif headings for fast scanning. Reserve Georgia italic for short emphasis and Consolas for IDs, dates, and small operational labels.
-- Pair orderly tables and status rows with restrained field-note details: an annotated plan, stamp, pencil-like arrows, or hand-marked status.
-- Keep decoration tied to real schedule or field concepts. Do not use decorative dashboard charts or invented project metrics.
-- Use familiar outline SVG icons with consistent 1.7px strokes. Icons are decorative when an adjacent text label names the action.
+Runtime CSS in `frontend/src/styles/palette.css` and `frontend/src/styles/tokens.css` is canonical. This document records the approved values and intent; edits to durable tokens should update both the CSS and this file.
 
-## Layout and routes
+## Colors
 
-- `/` is an editorial landing page with one prominent workspace link under the headline, a construction illustration, feature rows, a three-step guide, and native FAQ disclosures.
-- `/workspace` is the execution desk. It has a persistent project sidebar at desktop sizes and a horizontally scrollable navigation strip on narrow screens.
-- Sidebar views: Planned schedule, Actual work, Progress, Punch list, Institutional memory, Settings. Keep selection in the `view` query parameter.
-- The workspace uses comfortable body sizes (12–15px for supporting text, 14–18px for card content) and stronger section headings. Preserve dense schedules with table overflow rather than shrinking their type.
-- At widths below 940px, work panels and landing sections stack. Below 640px, keep the landing navigation, numbered steps, and FAQs readable without horizontal scrolling.
+Preserve the existing sand, terracotta, olive, amber, brick, and plum palette. Surfaces and borders carry hierarchy. Primary is for the next task action; olive means safe/applied, amber means review, brick means blocked/error, and plum is the keyboard focus ring. Status is always stated in text as well as color.
 
-## Interaction
+## Typography
 
-- Links navigate between pages; buttons change local view state or submit work.
-- Sidebar follows the vertical ARIA tabs pattern: Up/Down, Home, and End move and activate views. Keep visible focus outlines.
-- Upload and approval actions preserve their current pessimistic behavior. Show errors next to the current work and keep recoverable drafts.
-- Settings and identity details are clearly labeled as demo placeholders until authentication and organization settings are connected.
-- Respect reduced motion. Status meaning always includes words, not color alone.
+System sans keeps labels and reports legible without a network font dependency. Monospace is reserved for IDs, counts, and measured quantities. Page titles are compact; tables and review rows prioritize comparison over display typography.
 
-## Product boundaries
+## Layout
 
-- The API prototype stores workspace data in process memory. Do not imply that session data is durable.
-- The progress view reports known completion and overdue work; it does not estimate a project completion date or critical-path delay.
-- Reported time intervals use a soft edged 24 hour track in India Standard Time; show the confidence and exact bounds next to each band.
-- Institutional memory is not connected to a durable store yet.
+A desktop sidebar and mobile bottom navigation keep the four destinations stable. Main content is bounded and uses task-specific grids, while long tables own their own scroll area. Mobile pages scroll naturally above the navigation. Controls and notifications retain their dimensions as state changes.
+
+## Elevation & Depth
+
+Borders, surface contrast, and spacing create hierarchy. Only transient feedback may use a subtle shadow. Page sections are unframed; panels frame actual tools such as upload forms and the safety decision area.
+
+## Shapes
+
+Controls use 6px corners and framed panels use 8px. Tables and evidence rows rely on straight dividers. No decorative pills or large rounded containers.
+
+## Components
+
+Buttons use primary, secondary, and quiet treatments with visible focus and disabled states. Badges use one shared semantic mapping. Forms show errors in text and retain input after failure. Uploads use explicit file selection and action. Review decisions remain in a consistent location and show the current patch state. Loading and empty states say what the user can do next.
+
+The report date uses the native date picker; its platform-owned calendar is acceptable for this English-first demo. Long field messages use a fixed-height textarea with document scrolling.
+
+The Schedule route shows planned activity dates, status, overdue work, and the dependency map from the import response. The Reports route queues up to ten report files and submits them sequentially so each source joins the same pending report.
+Reported time ranges use a 24-hour track in India Standard Time with confidence and exact bounds; the Review route lists activities past their planned finish. Neither implies a project completion forecast.
+
+## Do's and Don'ts
+
+- Do keep evidence beside proposed changes and use real activity IDs and report data.
+- Do keep action names and status meanings consistent across routes.
+- Don't imply that a finding has been resolved just because a clarification answer was recorded.
+- Don't add placeholder analytics or a Gantt chart without corresponding data.

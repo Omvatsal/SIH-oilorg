@@ -11,10 +11,13 @@ Install the dependencies, then run the API and frontend in separate terminals:
 ```bash
 pip install -e .
 uvicorn construction_reconciliation.main:app --reload
+```
+
+```bash
 cd frontend && npm install && npm run dev
 ```
 
-Open `http://localhost:3000`, import the demo schedule, then compile the prefilled P-201 report. The API also exposes `/docs` at `http://127.0.0.1:8000/docs`.
+Open `http://localhost:3000`. The workspace has four routes: Import, Field reports, Review changes, and Schedule. Import the sample schedule, then compile the prefilled P-201 report. The API also exposes `/docs` at `http://127.0.0.1:8000/docs`.
 
 Demo route (about two minutes): import the 40-activity schedule, compile the prefilled P-201 chat, inspect the three proposed activity updates and four checks per update, apply the patch, then undo it. Replace the message with `Grouting completed for P-201.` to see unmatched work retained for review. Upload `src/construction_reconciliation/demo_data/contractor_dpr.xlsx` to exercise Excel ingestion; use `hydrotest_chat.txt` to see a missing NDT predecessor flagged.
 
@@ -24,7 +27,7 @@ Phase 2 adds timezone-aware evidence intervals and multi-source workspaces. Time
 
 Schedule import also returns a dependency graph (`prerequisite → dependent`) with its topological order and consistency findings. The graph analyzer is available to Python callers as `analyze_dependency_graph(schedule)` from `construction_reconciliation.demo`, and via `GET /schedule/{schedule_id}/dependencies`. It reports missing references, self-dependencies, cycles, duplicate edges, and possible finish-to-start date overlaps; findings are returned with the graph instead of rejecting the schedule import.
 
-The Progress view also displays extracted report time intervals as confidence-labeled bands on a 24-hour IST track. The exact local date and earliest/latest bounds remain visible beside each band; a range is not presented as a precise timestamp. These intervals are parsed from report phrases and narrowed by intersecting compatible evidence. Conflicting bounds stay in the punch list for planner review.
+Field reports displays extracted time intervals as confidence-labeled bands on a 24-hour IST track. Schedule shows planned dates, activity status, overdue work, and the dependency map. Review changes lists conflicting evidence and activities past their planned finish. A time range is not presented as a precise timestamp.
 
 ## Folder organization
 

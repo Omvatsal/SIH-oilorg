@@ -1,8 +1,10 @@
 import "./globals.css";
 import { BRAND } from "../config/brand";
+import { AppShell } from "../components/app-shell";
+import { WorkspaceProvider } from "../components/workspace-provider";
 
 export const metadata = { title: BRAND.name, description: BRAND.tagline };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body><WorkspaceProvider><AppShell>{children}</AppShell></WorkspaceProvider></body></html>;
 }

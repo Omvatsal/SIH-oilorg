@@ -4,6 +4,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 frontend/node_modules/
+frontend/.npm-cache/
 frontend/.next/
 *.tsbuildinfo
+frontend/.next-dev/
 .artifact/
